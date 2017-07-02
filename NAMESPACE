@@ -1,0 +1,5 @@
+exportPattern("scTarNet*")
+import(ppcor)
+import(energy)
+import(pdcor2)
+import(igraph)
