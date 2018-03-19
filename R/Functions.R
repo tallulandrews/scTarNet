@@ -1,290 +1,212 @@
 #prevent t-test errors from crashing
-my.t.test <- function(...) {
+getDirection <- function(...) {
     obj<-try(t.test(...), silent=TRUE)
     if (is(obj, "try-error")) {
 		obj$p.value=NA
-		return(obj) 
-	}else{ 
-		return(obj)
-	}
-}
-
-cor.test.somevsall <- function(mat, rows, method) {
-        N = length(mat[,1]);
-        M = length(rows);
-        pvals = matrix(rep(NA,times=N*M),nrow=M,ncol=N);
-        strength = matrix(rep(NA,times=N*M),nrow=M,ncol=N);
-        for (j in 1:M) {
-                row = rows[j];
-        for (i in 1:N) {
-                test = cor.test(unlist(mat[row,]),unlist(mat[i,]), method=method)
-                pvals[j, i] = test$p.val;
-                strength[j, i] = test$estimate;
-                pvals[j, i] = test$p.val;
-                strength[j,i] = test$estimate;
-		if (i == j) {pvals[j,i]=1} # Gene no target itself.
-        }
-        }
-        output = list();
-        output$pvals = pvals;
-        output$strength = strength;
-        colnames(output$strength) = rownames(mat)
-        rownames(output$strength) = rownames(mat)[rows]
-        colnames(output$pvals) = rownames(mat)
-        rownames(output$pvals) = rownames(mat)[rows]
-        output
-}
-
-# Even with or instead of and always get nothing, is something wrong with the pdcors? -> needed to unlist each row of data.
-cor.test_pair_interaction <- function (x,method,Adj) {
-	require("ppcor")
-	gene1 = x[1]
-	gene2 = x[2]
-	gene1_rows = which(as.character(Adj[,1]) == gene1)
-	gene2_rows = which(as.character(Adj[,1]) == gene2)
-
-	gene1_targets = Adj[gene1_rows,2];
-	gene2_targets = Adj[gene2_rows,2];
-
-	sharedtargets = unique(gene1_targets[gene1_targets %in% gene2_targets])
-	interact_targets = vector();
-	for (t in sharedtargets) {
-		dcor_1t = Adj[(Adj[,1] == gene1 & Adj[,2] == t),]$strength
-		pdcor1t_2 = pcor.test(unlist(Mat[rownames(Mat)==gene1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==gene2,]), method=method)$estimate
-		dcor_2t = Adj[(Adj[,1] == gene2 & Adj[,2] == t),]$strength
-		pdcor2t_1 = pcor.test(unlist(Mat[rownames(Mat)==gene2,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==gene1,]), method=method)$estimate
-		if (abs(dcor_1t) < abs(pdcor1t_2) & abs(dcor_2t) < abs(pdcor2t_1)) {
-			# INTERACTION
-			if (pdcor1t_2 > 0 & pdcor2t_1 > 0) {
-				interact_targets = c(interact_targets,paste("+",t,sep=""));
-			} else if (pdcor1t_2 < 0 & pdcor2t_1 < 0) {
-				interact_targets = c(interact_targets,paste("-",t,sep=""));
-			} else {
-				interact_targets = c(interact_targets,t);
-			}
-		}
-	}
-	if (length(interact_targets) >= 1) {
-		return(list(pair = c(gene1,gene2), targets = interact_targets));
+		return(0) 
+	}else if (obj$p.value < 0.05) {
+		return(sign(obj$statistic))
 	} else {
-		return(NA)
+		return(0);
 	}
 }
 
+dcor.test.somevsall <- function(mat, rows, n.cores) {
+	# Parallelize
+	cl <- parallel::makeCluster(n.cores);
+	registerDoParallel(cl);
+	
+        N <- length(mat[,1]);
+        M <- length(rows);
+        pvals <- matrix(rep(NA,times=N*M),nrow=M,ncol=N);
+        strength <- matrix(rep(NA,times=N*M),nrow=M,ncol=N);
+        direction <- matrix(rep(NA,times=N*M),nrow=M,ncol=N);
 
-dcor.test.somevsall <- function(mat, rows) {
-        require("energy")
-        require("pdcor2")
-        N = length(mat[,1]);
-        M = length(rows);
-        pvals = matrix(rep(NA,times=N*M),nrow=M,ncol=N);
-        strength = matrix(rep(NA,times=N*M),nrow=M,ncol=N);
-        direction = matrix(rep(NA,times=N*M),nrow=M,ncol=N);
-        for (j in 1:M) {
-                row = rows[j];
-		bins = quantile(mat[row,],c(0.25,0.75))
-		low = unlist(quantile(mat[row,],c(0.25)))
-		high = unlist(quantile(mat[row,],c(0.75)))
-        for (i in 1:N) {
-                test = dcor.ttest(unlist(mat[row,]),unlist(mat[i,]))
-                pvals[j, i] = test$p.val;
-                strength[j, i] = test$estimate;
-		if (i == row) {pvals[j,i]=1} # Gene no target itself.
-			
-		test_dir = my.t.test(mat[i,(mat[row,]<=low)],mat[i,(mat[row,]>=high)])
-		if (is.na(test_dir$p.value)) {
-			direction[j,i] = 0;
-		} else {
-			if (low != high & test_dir$p.value < 0.05) {
-				if (test_dir$estimate[1] < test_dir$estimate[2]) {
-					direction[j,i] = 1;
-				} else {
-					direction[j,i] = -1;
-				}
-			} else {
-				direction[j,i] = 0;
-			}
+
+        x <- foreach (i = 1:M, .combine='rbind', .packages='foreach') %dopar% {
+                row <- rows[i];
+		bins <- quantile(mat[row,], c(0.25,0.75))
+		low <- bins[1]
+		high <- bins[2]
+		if (low == high) {high <- high+10^-5}
+
+        foreach (j=1:N, .combine='c') %dopar% {
+		if (j == row) { # gene to self 
+			return(data.frame(pv=1, st=1, d=1))
+		}		
+		getDirection <- function(...) {
+		    obj<-try(t.test(...), silent=TRUE)
+		    if (is(obj, "try-error")) {
+		                obj$p.value=NA
+		                return(0)
+		        }else if (obj$p.value < 0.05) {
+		                return(sign(obj$statistic))
+		        } else {
+		                return(0);
+		        }
 		}
-        }
-        }
+
+
+
+                dcor_test = energy::dcor.ttest(unlist(mat[row,]),unlist(mat[j,]))
+
+                pvals = dcor_test$p.val;
+                strength = dcor_test$estimate;
+		
+		dir = getDirection(mat[j,(mat[row,]<=low)],mat[j,(mat[row,]>=high)])
+		return(data.frame(pv=pvals, st=strength, d=dir));
+        } # inner foreach (each potential target)
+        } # outer foreach (each TF)
+	stopCluster(cl);
+
         output = list();
-        output$pvals = pvals;
-        output$strength = strength;
-	output$dir = direction
+	output$pvals<-x[,grep("pv",colnames(x))]
+	output$strength<-x[,grep("st",colnames(x))]
+	output$direction<-x[,grep("d",colnames(x))]
+
         colnames(output$strength) = rownames(mat)
         rownames(output$strength) = rownames(mat)[rows]
         colnames(output$pvals) = rownames(mat)
         rownames(output$pvals) = rownames(mat)[rows]
         colnames(output$dir) = rownames(mat)
         rownames(output$dir) = rownames(mat)[rows]
-        output
+        return(output)
 }
 
-# Even with or instead of and always get nothing, is something wrong with the pdcors? -> needed to unlist each row of data.
-dcor.test_pair_interaction <- function (x, Adj, margin = 0) {
-        require("energy")
-        require("pdcor2")
-	gene1 = x[1]
-	gene2 = x[2]
-	gene1_rows = which(as.character(Adj[,1]) == gene1)
-	gene2_rows = which(as.character(Adj[,1]) == gene2)
+dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold.interaction) {
 
-	gene1_targets = Adj[gene1_rows,2];
-	gene2_targets = Adj[gene2_rows,2];
+	tf1 <- x[1];
+	tf2 <- x[2];
+	threshold.interaction <- 1 + threshold.interaction
 
-	sharedtargets = unique(gene1_targets[gene1_targets %in% gene2_targets])
-	interact_targets = vector();
-	pathway_targets = vector(); seen = 0;
+	tf1.targets <- Dep[ which(as.character(Dep[,1]) == tf1) , 2]; tf1.targets[tf1.targets != tf2]; # triplets only
+	tf2.targets <- Dep[ which(as.character(Dep[,1]) == tf1) , 2]; tf1.targets[tf2.targets != tf1]; # triplets only
+	sharedtargets = intersect(as.character(tf1.targets), as.character(tf2.targets))
+	out <- vector()
 	for (t in sharedtargets) {
-		if (sum(as.character(Adj[,1]) == gene1 & as.character(Adj[,2]) == t) > 0 & sum(as.character(Adj[,1]) == gene2 & as.character(Adj[,2]) == t) > 0) {
-		if ( gene1 != gene2 & gene1 != t & gene2 != t) {
+		dcor_1_t <- Dep[Dep[,1] == tf1, Dep[,2] == t,]$strength;
+		dcor_2_t <- Dep[Dep[,1] == tf2, Dep[,2] == t,]$strength;
 
-		dcor_1t = Adj[(Adj[,1] == gene1 & Adj[,2] == t),]$strength
-		pdcor1t_2 = pdcor(unlist(Mat[rownames(Mat)==gene1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==gene2,]))
-		dcor_2t = Adj[(Adj[,1] == gene2 & Adj[,2] == t),]$strength
-		pdcor2t_1 = pdcor(unlist(Mat[rownames(Mat)==gene2,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==gene1,]))
-		if (dcor_1t+margin < pdcor1t_2 & dcor_2t+margin < pdcor2t_1) {
-			# INTERACTION
-			interact_targets = c(interact_targets,t);
-#		} else  if (pdcor2t_1 >= dcor_2t-margin & pdcor1t_2 <= 0+margin & pdcor1t_2 < dcor_1t-margin) {
-		} else  if (pdcor2t_1 >= dcor_2t-margin & pdcor1t_2 < dcor_1t-margin) {
-                        # gene1 -> gene2 -> target
-                       	pathway_targets = c(pathway_targets,t);
-                        if (seen) {
-                                if( first != gene1 ) {seen=2} # disagreement over direction
-                        } else {
-                                seen = 1;
-                        }
-                        first <- gene1; second <- gene2;
-#		} else	if (pdcor1t_2 >= dcor_1t-margin & pdcor2t_1 <= 0+margin & pdcor2t_1 < dcor_2t-margin) {
-		} else	if (pdcor1t_2 >= dcor_1t-margin & pdcor2t_1 < dcor_2t-margin) {
-			# gene2 -> gene1 -> target
-                        interact_targets = c(interact_targets,t);
-                        if (seen) {
-                                if( first != gene2 ) {seen=2} # disagreement over direction
-                        } else {
-                                seen = 1;
-                        }
-                        first <- gene2; second <- gene1;
-                }
-
+		pdcor_1_t_g2 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf2,]))
+		pdcor_2_t_g1 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf2,]))
+		if (pdcor_1_t_g2 > threshold.interaction*dcor_1_t & pdcor_2_t_g1 > threshold.interaction*dcor_2_t) {
+			# Interaction
+			out <- rbind(out, c(sort(c(tf1, tf2)), t, "interaction"));
+		} else if (pdcor_1_t_g2 < threshold.indirect*dcor_1_t) {
+			# 1->2->t
+			out <- rbind(out, c(tf1, tf2, t, "pathway"));
+		} else if (pdcor_2_t_g1 < threshold.indirect*dcor_2_t) {
+			# 2->1->t
+			out <- rbind(out, c(tf2, tf1, t, "pathway"));
 		}
-		}
-
 	}
-	if ((length(pathway_targets) >= 1 & seen == 1 ) & length(interact_targets) >= 1) {
-		return(list(complicated = c(first,second),targets=c(pathway_targets,interact_targets)));	
-	} else if (length(pathway_targets) >= 1 & seen == 1) {
-		return(list(pathway = c(first, second), targets = pathway_targets));
-	} else if (length(interact_targets) >= 1) {
-		return(list(pair = c(gene1,gene2), targets = interact_targets));
-	} else {
-		return(NA)
-	}
+	out <- data.frame(out)
+	colnames(out) <- c("TF1", "TF2", "Target", "type");
+	return(out);
 }
 
-dcor.test_pair_pathway <- function (x, Adj, margin=0.001){
-        require("energy")
-        require("pdcor2")
-	gene1 = x[1]
-	gene2 = x[2]
-	gene1_rows = which(as.character(Adj[,1]) == gene1)
-	gene2_rows = which(as.character(Adj[,1]) == gene2)
-
-	gene1_targets = Adj[gene1_rows,2];
-	gene2_targets = Adj[gene2_rows,2];
-
-	sharedtargets = unique(gene1_targets[gene1_targets %in% gene2_targets])
-	interact_targets = vector();
-	seen = 0;
-	for (t in sharedtargets) {
-		dcor_1t = Adj[(Adj[,1] == gene1 & Adj[,2] == t),]$strength
-		pdcor1t_2 = pdcor(unlist(Mat[rownames(Mat)==gene1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==gene2,]))
-		dcor_2t = Adj[(Adj[,1] == gene2 & Adj[,2] == t),]$strength
-		pdcor2t_1 = pdcor(unlist(Mat[rownames(Mat)==gene2,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==gene1,]))
-		if (pdcor1t_2 >= dcor_1t-margin & pdcor2t_1 <= 0+margin & pdcor2t_1 < dcor_2t-margin) {
-			# gene2 -> gene1 -> target
-			interact_targets = c(interact_targets,t);
-			if (seen) {
-				if( first != gene2 ) {seen=2} # disagreement over direction
-			} else {
-				seen = 1;
-			}
-			first <- gene2; second <- gene1;
-		}
-		if (pdcor2t_1 >= dcor_2t-margin & pdcor1t_2 <= 0+margin & pdcor1t_2 < dcor_1t-margin) {
-			# gene1 -> gene2 -> target
-			interact_targets = c(interact_targets,t);
-			if (seen) {
-				if( first != gene1 ) {seen=2} # disagreement over direction
-			} else {
-				seen = 1;
-			}
-			first <- gene1; second <- gene2;
-		}
+# Step 1
+calculateTFstoTargets <- function(Mat, TFs, n.cores=1, mt_correction="bon=0.05"){
+	# Process arguments
+	undetected <- rowSums(Mat > 0) == 0;
+	if (sum(undetected) > 0) {
+		print(paste("Removing", sum(undetected), "undetected genes."))
+		Mat <- Mat[!undetected,];
 	}
-	if (length(interact_targets) >= 1 & seen == 1) { #only report those with consistent direction
-		return(list(pair = c(first,second), targets = interact_targets));
-	} else {
-		return(NA)
-	}
-}
 
-do_interactions <- function(Mat,candidates, cor_type, multi_test, margin=0) {
-	candidates = as.character(candidates);
-	candidates.rows = which(rownames(Mat) %in% candidates);
-	candidates.rows = candidates.rows[!is.na(candidates.rows)];
-	if (length(candidates.rows) < length(candidates)) {
-		warning(paste("Only ",length(candidates.rows)," candidates have expression data.\n", sep=""));
-	}
-	if (length(candidates.rows) == 0) {stop("No expression data for any candidate genes. Are you sure gene IDs are consistent?");}
-
-	# Get Pair-wise dependencies
-	if (cor_type == "dcor") {
-		out <- dcor.test.somevsall(Mat,candidates.rows)
-	} else if (grep("cor=", cor_type))  {
-		method = unlist(strsplit(cor_type,"="));
-		out <- cor.test.somevsall(Mat,candidates.rows,method[2]);
-	} else {
-		warning("Did not recognize specified correlation method, using default (dcor)")
-		out <- dcor.test.somevsall(Mat,candidates.rows)
-	}
-	# Tidy up result (find significant interactions
-	pvals <- out$pvals
-	strength <- out$strength 
-	direction <- out$dir
-
-	# Apply Multiple Testing Correction
-	if (multi_test == "bon") {
-		Sig <- which(pvals < 0.05/length(pvals[1,]),arr.ind=T)
-	} else if (grep("fdr=", multi_test))  {
-		method = unlist(strsplit(multi_test,"="));
-		tmp <- pvals[p.adjust(pvals,method="fdr") < method[2]];
-		Sig <- which(pvals <= max(tmp), arr.ind=T);
-	} else if (grep("str=", multi_test)) {
-		method = unlist(strsplit(multi_test,"="));
-		Sig <- which(strength > method[2],arr.ind=T);
-	} else {
-		warning("Did not recognize specified multiple-testing correction, using default (bon)")
-		Sig <- which(pvals < 0.05/length(pvals[1,]),arr.ind=T)
-	}
-	Adj <- data.frame(Gene = rownames(pvals)[Sig[,1]], Target = colnames(pvals)[Sig[,2]], pval = apply(Sig,1,function(x){pvals[x[1],x[2]]}), strength = apply(Sig,1,function(x){strength[x[1],x[2]]}), direction = apply(Sig,1,function(x){direction[x[1],x[2]]}))
+	MTmethod = unlist(strsplit(mt_correction,"="));
 	
-	# Get Interactions by conditioning pairwise interactions 
-	#	on each other candidate gene
-	pairs <- t(combn(candidates,2))
+	TFs <- as.character(TFs)
+	TFs.rows <- which(rownames(Mat) %in% TFs);
+	TFs.rows <- TFs.rows[!is.na(TFs.rows)];
+	
 
-	if (cor_type == "dcor") {
-		interactions <- apply(pairs,1,dcor.test_pair_interaction,Adj=Adj,margin=margin)
-	} else if (grep("cor=", cor_type))  {
-		method = unlist(strsplit(cor_type,"="));
-		interactions <- apply(pairs,1,method=method[2],cor.test_pair_interaction,Adj=Adj)
+	out <- dcor.test.somevsall(Mat, TFs.rows, n.cores)
+	pvals <- as.matrix(out$pvals)
+ 	strength <- as.matrix(out$strength)
+  	direction <- out$dir
+
+	if (MTmethod[1] == "bon") {
+		Sig <- which(pvals < as.numeric(MTmethod[2])/length(pvals[1,]),arr.ind=T)
+	} else if (MTmethod[1] == "str") {
+		Sig <- which(strength > method[2], arr.ind=T);
 	} else {
-		warning("Did not recognize specified partial correlation method, using default (pdcor)")
-		interactions <- apply(pairs,1,dcor.test_pair_interaction,Adj=Adj)
+		tmp <- max(pvals[p.adjust(pvals,method=method[1]) < method[2]]);
+		Sig <- which(pvals <= tmp, arr.ind=T);
+	}
+	Dep <- data.frame(Gene = rownames(pvals)[Sig[,1]], Target = colnames(pvals)[Sig[,2]], pval = unlist(pvals[Sig]), strength = unlist(strength[Sig]), direction = unlist(direction[Sig]))
+	return(Dep);
+}
+
+# Step 2
+calculateConditionalCors <- function(Mat, TFs, Dep, n.cores=1, threshold.interaction=0.01, bidirectional=TRUE, threshold.indirect=0.5, exclude.indirect=TRUE) {
+	# threshold indirect = conditional dcors < this*original decor are equivalent to zero (set to a negative to turn off)
+	# threshold interaction = % increase in dcor after conditioning for a correlation to be considered an interaction
+	threshold.interaction <- 1 + threshold.interaction
+
+	undetected <- rowSums(Mat > 0) == 0;
+	if (sum(undetected) > 0) {
+		print(paste("Removing", sum(undetected), "undetected genes."))
+		Mat <- Mat[!undetected,];
 	}
 
-	# Clean & Return results
-	interactions <- interactions[!is.na(interactions)]
-	return(list(Adj = Adj,interactions = interactions));
+	TFs <- as.character(TFs)
+	TFs.rows <- which(rownames(Mat) %in% TFs);
+	TFs.rows <- TFs.rows[!is.na(TFs.rows)];
+	
+	pairs <- t(combn(TFs,2))
+	# Parallelize
+	cl <- parallel::makeCluster(n.cores);
+        inter <- foreach (i = 1:nrow(pairs), .combine='rbind', .packages='foreach') %dopar% {
+		dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold.interaction) {
+
+		        tf1 <- x[1];
+		        tf2 <- x[2];
+
+		        tf1.targets <- Dep[ which(as.character(Dep[,1]) == tf1) , 2]; tf1.targets <- tf1.targets[tf1.targets != tf2]; # triplets only
+		        tf2.targets <- Dep[ which(as.character(Dep[,1]) == tf2) , 2]; tf2.targets <- tf2.targets[tf2.targets != tf1]; # triplets only
+		        sharedtargets = intersect(as.character(tf1.targets), as.character(tf2.targets))
+		        out <- vector()
+		        for (t in sharedtargets) {
+		                dcor_1_t <- Dep[Dep[,1] == tf1 & Dep[,2] == t,]$strength;
+		                dcor_2_t <- Dep[Dep[,1] == tf2 & Dep[,2] == t,]$strength;
+
+		                pdcor_1_t_g2 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf2,]))
+		                pdcor_2_t_g1 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf2,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf1,]))
+				print(c(dcor_1_t, pdcor_1_t_g2))
+				print(c(dcor_2_t, pdcor_2_t_g1))
+		                if ((pdcor_1_t_g2 > threshold.interaction*dcor_1_t & pdcor_2_t_g1 > threshold.interaction*dcor_2_t) |
+					!bidirectional & (pdcor_1_t_g2 > threshold.interaction*dcor_1_t | pdcor_2_t_g1 > threshold.interaction*dcor_2_t )) {
+		                        # Interaction
+		                        out <- rbind(out, c(sort(c(tf1, tf2)), t, "interaction"));
+		                } else if (pdcor_1_t_g2 < threshold.indirect*dcor_1_t) {
+		                        # 1->2->t
+		                        out <- rbind(out, c(tf1, tf2, t, "pathway"));
+		                } else if (pdcor_2_t_g1 < threshold.indirect*dcor_2_t) {
+		                        # 2->1->t
+		                        out <- rbind(out, c(tf2, tf1, t, "pathway"));
+		                }
+		        }
+		        out <- data.frame(out)
+			if (nrow(out) > 0) {
+			        colnames(out) <- c("TF1", "TF2", "Target", "type");
+			        return(out);
+			}
+		}
+
+		dcor_classify_interaction(pairs[i,], Mat, Dep, threshold.indirect, threshold.interaction)
+	}
+	stopCluster(cl);
+
+	if (exclude.indirect) {
+		indirect <- unique(inter[inter[,"type"]=="pathway", c("TF2", "Target")])
+		direct_int <- dplyr::anti_join(inter, indirect, by=c("TF2", "Target"))
+		colnames(Dep) <- c("TF2", "Target", "pval", "strength", "direction");
+		Dep <- suppressWarnings(dplyr::anti_join(Dep, indirect, by=c("TF2", "Target"))) # get warnings if not all TFs involved in interactions/pathways
+		colnames(Dep) <- c("Gene", "Target", "pval", "strength", "direction");
+	} else {
+		direct_int <- inter;
+	}
+
+	return(list(Dep=Dep, Int=direct_int));
 }
