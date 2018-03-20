@@ -1,76 +1,55 @@
-# Read in Arguments 
-args=commandArgs(trailingOnly=T)
-if (length(args) > 3) {
-	inputfile = args[1];
-	outputfile = args[2];
-	backgroundfile = args[3];
-	expr_files = args[4:length(args)];
-} else {
-	stop('Please provide an input file of gene names,  output file name, a file of genes to sample from (or "all"), and at least one expression matrix file as arguments.');
-}
-#print(args)
-#print(expr_files)
-
-add_means<-function(old_means, new_means) {
+add_means <- function(old_means, new_means) {
 	if (length(old_means) > 1){ 
-		consistent = names(old_means) %in% names(new_means);
-		old_means = old_means[consistent]; 
-		old_means = old_means[sort(names(old_means))];
-		consistent = names(new_means) %in% names(old_means);
-		new_means = new_means[consistent]; 
-		new_means = new_means[sort(names(new_means))];
+		consistent <- names(old_means) %in% names(new_means);
+		old_means <- old_means[consistent]; 
+		old_means <- old_means[sort(names(old_means))];
+		consistent <- names(new_means) %in% names(old_means);
+		new_means <- new_means[consistent]; 
+		new_means <- new_means[sort(names(new_means))];
 		return(old_means+new_means);
 	} else {
 		return(new_means);
 	}
 }
 
-# Read in files
-count = 0;
-expr_means = 0;
-for (i in as.vector(expr_files)) {
-	if (grepl("\\.rda$",i) | grepl("\\.RData$",i)) {
-		# Load RData object
-		objs = load(i);
-		for (thing in objs) {
-			mat<-try(as.matrix(thing),silent=TRUE);
-			if (!(class(mat) == "try-error")){
-				expr_means <- add_means(expr_means, rowMeans(mat));
-				count = count+1;
+overall_means <- function(list_of_expr_mats) {
+	# Support matrices or rds
+	gene_means<-vector()
+	for (i in 1:length(list_of_expr_mats)) {
+		input <- list_of_expr_mats[[i]];
+		if (class(input) == "character" | is.null(dim(input)[1])) {
+			if (grepl("\\.rds$", input)) {
+				input <- readRDS(input) 
 			} else {
-				warning(paste(i, "could not be turned into a matrix. Skipped."));
+				input <- read.table(input, header=T)
 			}
-		}
-	} else {
-		# Load text file
-		thing <- read.table(i, header=T)
-		mat<-try(as.matrix(thing),silent=TRUE);
-		if (!(class(mat) == "try-error")){
-			expr_means <- add_means(expr_means, rowMeans(mat));
-			count = count+1;
-		} else {
-			warning(paste(i, "could not be turned into a matrix. Skipped."));
-		}
+		} 
+		gene_means <- add_means(gene_means, rowMeans(input))
 	}
+	gene_means <- gene_means/length(list_of_expr_mats);
+	return(gene_means);
 }
-if (count == 0) {stop("No Expression Matrices could be read correctly.");}
-expr_means <- expr_means/count;
 
-# get sample
-orig_genes = read.table(inputfile, header=F)
-orig_genes = as.character(orig_genes[,1]);
+sample_genes <- function(input_genes, background_genes="all", list_of_expr_mats) {
+	orig_genes <- as.character(input_genes);
+	gene_means <- overall_means(list_of_expr_mats);
+	if (length(background_genes) > length(orig_genes)){
+		possible_genes <- background_genes;
+	} else if (background_genes[1] == "all") {
+		possible_genes <- names(gene_means);
+	} else {
+		stop("Error: insufficient background genes");
+	} 
+	possible_genes <- gene_means[names(gene_means) %in% possible_genes];
+	possible_genes <- names(possible_genes[possible_genes > min(gene_means) & possible_genes < max(gene_means)]);
+	bin_breaks <- c(quantile(possible_genes, probs=c(0,0.2, 0.4, 0.6,0.8)), max(possible_genes))
+	bins <- cut(possible_genes, bin_breaks, include.lowest=TRUE)
+	new_genes <- sapply(levels(bins), function(lvl) {
+			this_set <- possible_genes[bins==lvl];
+			new_genes <- sample(this_set, size=sum(names(this_set) %in% orig_genes))
+			return(new_genes)
+			})
 
-orig_expr = expr_means[names(expr_means) %in% orig_genes];
-if (!(backgroundfile == "all")) {
-	possible_genes = read.table(backgroundfile, header=F);
-	possible_genes = as.character(possible_genes[,1]);
-} else {
-	possible_genes = names(expr_means);
+	return(new_genes);
 }
-possible_genes = expr_means[names(expr_means) %in% possible_genes];
 
-possible_genes = names(possible_genes[possible_genes > min(orig_expr) & possible_genes < max(orig_expr)]);
-
-new_genes = sample(possible_genes, size=sum(names(expr_means) %in% orig_genes));
-
-write.table(new_genes, file=outputfile, col.names=FALSE, row.names=FALSE, quote=FALSE)

@@ -14,7 +14,7 @@ getDirection <- function(...) {
 dcor.test.somevsall <- function(mat, rows, n.cores) {
 	# Parallelize
 	cl <- parallel::makeCluster(n.cores);
-	registerDoParallel(cl);
+	doParallel::registerDoParallel(cl);
 	
         N <- length(mat[,1]);
         M <- length(rows);
@@ -157,6 +157,7 @@ calculateConditionalCors <- function(Mat, TFs, Dep, n.cores=1, threshold.interac
 	pairs <- t(combn(TFs,2))
 	# Parallelize
 	cl <- parallel::makeCluster(n.cores);
+	doParallel::registerDoParallel(cl);
         inter <- foreach (i = 1:nrow(pairs), .combine='rbind', .packages='foreach') %dopar% {
 		dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold.interaction) {
 
