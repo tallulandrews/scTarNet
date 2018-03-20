@@ -5,7 +5,7 @@
 	Plot the gene-gene correlations inferred by calculateTFstoTargets, which are targets of the TF-TF interactions inferred by calculateConditionalCors.
 }
 \usage{
-	plotInteractionsWithTargets(combined_dependencies, combined_interactions, recurr_threshold=max(combined_interactions$rucurr)/2, suppress.plot=FALSE, seed.col="dodgerblue", target.col="goldenrod1", interaction.col="black", edge.col=c("blue", "grey45", "red"))
+plotInteractionsWithTargets(combined_dependencies, combined_interactions, recurr_threshold=max(combined_interactions$pair2consistent[,3])/2, suppress.plot=FALSE, seed.col="dodgerblue", target.col="goldenrod1", interaction.col="black", edge.col=c("blue", "grey45", "red"), rnd.seed=2948)
 }
 \arguments{
   \item{combined_dependencies}{Output from combineDependencies}
@@ -16,6 +16,7 @@
   \item{target.col}{colour of target nodes}
   \item{interaction.col}{colour of edges for TF-TF interactions}
   \item{edge.col}{colour of edges for negative, other, and positive correlations}
+  \item{rnd.seed}{random number generator seed, to ensure reproducible plots.}
 }
 \details{
 	Filters TF-TF interactions and TF-Target correlations based on the frequency it was observed across replicates. 
@@ -36,7 +37,7 @@
 	pair2consistent <- data.frame(TF1=c("A","A","B"), TF2=c("B", "C", "C"))
 	pair2consistent$recurr <- rpois(nrow(pair2consistent), lambda=1)+1
 
-	inteactions_out <- list(pair2targets=pair2targets, pair2consistent=pair2consistent);
+	interactions_out <- list(pair2targets=pair2targets, pair2consistent=pair2consistent);
 
 	plotInteractionsWithTargets(dependencies_out, interactions_out, recurr_threshold=2, suppress.plot=TRUE)
 }

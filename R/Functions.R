@@ -129,10 +129,15 @@ calculateTFstoTargets <- function(Mat, TFs, n.cores=1, mt_correction="bon=0.05")
 	if (MTmethod[1] == "bon") {
 		Sig <- which(pvals < as.numeric(MTmethod[2])/length(pvals[1,]),arr.ind=T)
 	} else if (MTmethod[1] == "str") {
-		Sig <- which(strength > method[2], arr.ind=T);
+		Sig <- which(strength > MTmethod[2], arr.ind=T);
 	} else {
-		tmp <- max(pvals[p.adjust(pvals,method=method[1]) < method[2]]);
-		Sig <- which(pvals <= tmp, arr.ind=T);
+		tmp <- p.adjust(pvals,method=MTmethod[1]) < MTmethod[2];
+		if (sum(tmp) > 0) {
+			tmp <- max(unlist(pvals[tmp]));
+			Sig <- which(pvals <= tmp, arr.ind=T);
+		} else {
+			Sig <- c()
+		}
 	}
 	Dep <- data.frame(Gene = rownames(pvals)[Sig[,1]], Target = colnames(pvals)[Sig[,2]], pval = unlist(pvals[Sig]), strength = unlist(strength[Sig]), direction = unlist(direction[Sig]))
 	return(Dep);

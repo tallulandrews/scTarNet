@@ -14,8 +14,8 @@ combineInteractions <- function(list_of_interaction_tables) {
 		pair2consistent <- rbind(pair2consistent,unique(interact[,c("TF1", "TF2")]));
 		pair2targets <- rbind(pair2targets,pairs2tar);
 	}
-	pair2consistent <- plyr::ddply(pair2consistent, .(TF1,TF2), nrow) # 3rd column = number of datasets seen in
-	pair2targets <- plyr::ddply(pair2targets, .(TF1,TF2,Target), nrow) # 3rd column = number of datsets seen in
+	pair2consistent <- plyr::ddply(pair2consistent, c("TF1","TF2"), nrow) # 3rd column = number of datasets seen in
+	pair2targets <- plyr::ddply(pair2targets, c("TF1","TF2","Target"), nrow) # 3rd column = number of datsets seen in
 	colnames(pair2consistent) <- c("TF1", "TF2", "recurr")
 	colnames(pair2targets) <- c("TF1", "TF2", "Target", "recurr")
 
@@ -41,7 +41,7 @@ combineDependencies <- function(list_of_correlation_tables) {
 			return(c(val, 0))
 		}
 	}
-	merged <- plyr::ddply(merged, .(Gene, Target), merge_directions);
+	merged <- plyr::ddply(merged, c("Gene", "Target"), merge_directions);
 	colnames(merged) <- c("Gene", "Target", "recurr", "direction");
 
 	return(merged);

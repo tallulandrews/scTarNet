@@ -11,15 +11,36 @@
 
 \section*{Introduction}
 
-Single-cell RNA sequencing is able to quantify the whole transcriptome from the small amount of RNA present in individual cells. 
+Single-cell RNA sequencing is able to quantify the whole transcriptome from the small amount of RNA present in individual cells. The
+inherrent biological variability and large number of samples in single-cell experiments provides a greater opportunity for inferring
+gene-regulatory networks than traditional bulk RNASeq. This package provides a targetted network inference for a specified set of 
+transcription factors applicable to single-cell data (scTarNet) based the distance correlation statistic. 
+
+The distance correlation (dCor) is a new statistical approach introduced by Szekely and Risso (2007, 2013) which is able to detect both 
+linear and non-linear dependencies between variables. Instead of correlating the values of two vectors, dCor first calculate the 
+distances between all the pairs of values in each vector then calculates the correlation between these distance vectors. 
+
+$$dCor(X,Y) = \frac{dCov(X,Y)}{\sqrt{dVar(X)dVar(Y)}}$$
+
+The distance covariance (dCov) is calculated as:
+
+$$ dCov^2(X,Y) = \fract{1}{n^2}\sum_j\sum_k A_{j,k}B_{j,k} $$
+
+where $A_{j,k}$ and $B_{j,k}$ are:
+
+$$A_{j,k} = X_j - X_k - \frac{1}{n}\sum_j \parallel X_j - X_k \parallel - \frac{1}{n}\sum_k \parallel X_j - X_k \parallel + \frac{1}{n^2}\sum_j\sum_k \parallel X_j - X_k \parallel$$
+
+$$B_{j,k} = Y_j - Y_k - \frac{1}{n}\sum_j \parallel Y_j - Y_k \parallel - \frac{1}{n}\sum_k \parallel Y_j - Y_k \parallel + \frac{1}{n^2}\sum_j\sum_k \parallel Y_j - Y_k \parallel$$
+
+where $\parallel Z \parallel$ is the Euclidean norm.
 
 
-\subsection*{Distance Correlation}
+$dVar(X)$ is just a special case of $dCov(X,Y)$ where both variables are the same ($Y=X$).
 
-%Display Mathematical Equation
-$$P_{i} = 1 - \frac{S_{i}}{S_{i}+K}$$
-
-Where $P_{i}$ is the proportion of cells where gene $i$ dropouts out, $S_{i}$ is the mean expression of gene $i$ and $K$ is the Michaelis constant.
+Indirect and TF-TF interactions are then inferred by conditioning each pair-wise relationship on every other TF one at a time.
+Correlations which approach zero after conditioning are determined to be indirect or "pathway" correlations. Whereas coorelations
+which increase after conditioning are determined to be TF-TF interactions. This conditioning is done using the partial distance
+correlation, see Szekely and Rizzo (2013) for details.
 
 \section*{Example Workflow}
 
@@ -30,11 +51,11 @@ the three core pluripotency factors: Oct4 (Pou5f1), Sox2, and Nanog:
 
 <<results=hide>>=
 library(scTarNet)
-library(plyr)
-library(dplyr)
-library(doParallel)
-library(parallel)
-data <- readRDS("../data/minimalexData.rds")
+#library(plyr)
+#library(dplyr)
+#library(doParallel)
+#library(parallel)
+dim(mESCs)
 tfs <- c("Sox2", "Pou5f1", "Nanog", "Bmp4", "Sall4", "Esrrb", "Stat3", "Klf4")
 @
 
@@ -43,7 +64,7 @@ tfs <- c("Sox2", "Pou5f1", "Nanog", "Bmp4", "Sall4", "Esrrb", "Stat3", "Klf4")
 The first step in any bioinformatics analysis to the filter the data for quality and normalize it to remove technical artifacts. To speed up computations you may also want to filter out genes with low variability or expressed at very low levels (>95\% zeros) as there is generally little information present in these genes. The dCor statistic is allows detection of non-linear relationships and is relatively robust to the distribution of expression values, thus most normalization approaches are compatible with scTarNet. We have already filtered and CPM normalized the Kolodziejczyk mESC data, thus we will just log transform it now:
 
 <<>>=
-data <- log2(data+1)
+data <- log2(mESCs+1)
 @
 
 \subsection*{Initial correlation network with dCor}
@@ -53,7 +74,7 @@ Once the data is prepared we will find all the genes significantly correlated wi
 dCorEdges <- calculateTFstoTargets(data, tfs, n.cores=1, mt_correction="bon=0.05")
 head(dCorEdges)
 @
-\\
+
 Here we specified to use a bonferroni multiple testing correction with a significance threshold of q < 0.05. scTarNet also supports filtering correlations by magnitude (e.g. "str=0.1"), and any multiple test correction supported by the p.adjust function. 
 
 \subsection*{Identifying interactions using partial dCor}
@@ -79,7 +100,7 @@ Here we can see the targets for which there was an interaction between Oct4 and 
 
 \subsection*{Combining results from multiple replicates}
 
-If we had multiple biological replicates, we would run the previous steps on each replicate independently then consider whether the#correlations and TF-TF interactions we found were replicated in each batch or experimental replicate. Filtering out non-replicated
+If we had multiple biological replicates, we would run the previous steps on each replicate independently then consider whether the correlations and TF-TF interactions we found were replicated in each batch or experimental replicate. Filtering out non-replicated
 correlations can further reduce the false-positives present in our final network. 
 
 We have provided separate functions for both the raw dCors (known as "dependencies"), and the results from the partial dCor ("interactions"). For each you must provide a list of the output and the functions will return the consensus results along with how frequently the result was observed across replicates ("recurr"). Since we are only using one batch we have a list of one matrix for each function.
@@ -101,12 +122,18 @@ for further customization the graph is returned to the user as both an edgelist 
 graph_info <- plotInteractionsWithTargets(Dep, Int, recurr_threshold=1)
 head(graph_info$edgelist)
 @
-\\
+
 \textbf{Figure 1}: TF-TF interaction network. Blue and gold nodes are the seed TFs and targets respectively. Thick black lines are TF-TF interactions, and thin blue, red and grey lines indicate negative, positive, and "other" correlations respectively.
 \end{center}
 
 \section*{References}
 
-Kolodziejczyk AA, et al. \textit{Cell Stem Cell}, 17(4):471-485, 2015. doi:10.1016/j.stem.2015.09.11, PMID: 26431182
+Bergiers, Andrews, et al. (2018) Single-cell transcriptomics reveals a new dynamical function of transcription factors during embryonic hematopoiesis. \textit{elife}, 7, doi:10.7554/eLife.29312
+
+Kolodziejczyk et al. (2005). Single Cell RNA-Sequencing of Pluripotent States Unlocks Modular Transcriptional Variation. \textit{Cell Stem Cell}, 17(4):471-485, 2015. doi:10.1016/j.stem.2015.09.11, PMID: 26431182
+
+Szekely, Rizzo and Bakirov. (2007) Measuring and testing dependence by correlation of distances. \textit{Annals of Statistics}. 35(6), 2769-2794
+
+Szekely and Rizzo. (2013) Partial Distance Correlation with Methods for Dissimilarities. \textit{arXiv.org}. doi: arXiv:1310.2926
 
 \end{document}

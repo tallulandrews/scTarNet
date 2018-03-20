@@ -5,11 +5,12 @@ Title: Single-cell Targetted Network Inference
 Author: Tallulah Andrews <tallulandrews@gmail.com>
 Maintainer: Tallulah Andrews <tallulandrews@gmail.com>
 Depends: R (>= 3.3.0)
-Imports: energy, igraph, plyr, dplyr, parallel, doParallel
+Imports: energy, igraph, plyr, dplyr, parallel, doParallel, methods, foreach
 Suggests: knitr
 VignetteBuilder: knitr
 biocViews: RNASeq, Sequencing, Transcriptomics, GeneExpression, Software, GraphAndNetwork
 Collate: Functions.R Combine_Edges.R Plotting_Functions.R Sample_Genes.R
+LazyData: true
 Description: This package uses partial correlations to identify interactions between a set of user-provided transcription factors. Uses distance- and spearman- correlations to deal with non-gaussian single-cell RNASeq data. 
 URL: https://github.com/tallulandrews/scTarNet
 BugReports: https://github.com/tallulandrews/scTarNet/issues

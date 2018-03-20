@@ -32,7 +32,7 @@ plotInteractions<-function(combined_interactions, recurr_threshold=max(combined_
 	Targets <- dplyr::inner_join(Targets, Interactions, by=c("TF1", "TF2"))
 	Targets <- Targets[,1:4]
 	Targets <- Targets[Targets[,4] >= recurr_threshold,]
-	NTargets <- plyr::ddply(Targets, .(TF1, TF2), nrow);
+	NTargets <- plyr::ddply(Targets, c("TF1", "TF2"), nrow);
 	NTargets[,3] <- NTargets[,3]-min(NTargets[,3]);
 	NTargets[,3] <- NTargets[,3]/(max(NTargets[,3])+0.01)*4+1;
 

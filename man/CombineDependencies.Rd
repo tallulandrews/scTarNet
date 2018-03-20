@@ -5,10 +5,10 @@
 	Combines output from calculateTFstoTargets for multiple batches/normalizations.
 }
 \usage{
-	conbineDependencies(list_of_correlation_tables)
+	combineDependencies(list_of_correlation_tables)
 }
 \arguments{
-  \item{list_of_correlation_tables}
+  \item{list_of_correlation_tables}{list of output from calculateTFstoTargets}
 }
 \details{
 	Counts the number of times TF-Target inferred across multiple batches or normalizations. And infers the consensus direction of the relationship as follows:
@@ -27,6 +27,8 @@
 		Target=sample(c("E", "F", "G", "E", "F"), 50, replace=TRUE)
 		)
 	batchA_output <- unique(batchA_output)
+	batchA_output$estimate <- rep(1, times=nrow(batchA_output))
+	batchA_output$pval <- rep(1, times=nrow(batchA_output))
 	batchA_output$direction <- sample(c(1,0,-1), nrow(batchA_output), replace=TRUE)
 
 
@@ -35,6 +37,8 @@
 		Target=sample(c("E", "F", "G", "E", "F"), 50, replace=TRUE)
 		)
 	batchB_output <- unique(batchB_output)
+	batchB_output$estimate <- rep(1, times=nrow(batchB_output))
+	batchB_output$pval <- rep(1, times=nrow(batchB_output))
 	batchB_output$direction <- sample(c(1,0,-1), nrow(batchB_output), replace=TRUE)
 
 	consensus <- combineDependencies(list(batchA_output, batchB_output));

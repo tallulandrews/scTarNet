@@ -33,6 +33,6 @@ the TF:
 	Mat <- matrix(rnorm(1000), nrow=10);
 	rownames(Mat) <- c("A", "B", "C", "D", "E",
 			   "F", "G", "H", "I", "J")
-	out <- calculateTFstoTargets(Mat, c("A", "B", "C", "D"), n.cores=1, mt_method="fdr=0.2")
+	out <- calculateTFstoTargets(Mat, c("A", "B", "C", "D"), n.cores=1, mt_correction="fdr=0.2")
 }
 \seealso{getDirection}

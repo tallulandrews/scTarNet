@@ -5,7 +5,7 @@
 	Plot the gene-gene correlations inferred by calculateTFstoTargets.
 }
 \usage{
-	plotDependencies(combined_dependencies, recurr_threshold=max(combined_dependencies$rucurr)/2, suppress.plot=FALSE, seed.col="dodgerblue", target.col="goldenrod1", edge.col=c("blue", "black", "red"))
+	plotDependencies(combined_dependencies, recurr_threshold=max(combined_dependencies$recurr)/2, suppress.plot=FALSE, seed.col="dodgerblue", target.col="goldenrod1", edge.col=c("blue", "black", "red"), rnd.seed=2948)
 }
 \arguments{
   \item{combined_dependencies}{Output from combineDependencies}
@@ -14,6 +14,7 @@
   \item{seed.col}{colour of seed TF nodes}
   \item{target.col}{colour of target nodes}
   \item{edge.col}{colour of edges for negative, other, and positive correlations}
+  \item{rnd.seed}{random number generator seed, to ensure reproducible plots.}
 }
 \details{
 	Filters TF-Target relationships based on the frequency it was observed across replicates. 

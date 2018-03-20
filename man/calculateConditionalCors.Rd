@@ -5,12 +5,12 @@
 	Calculates gene-gene correlations for a set of TFs to all genes in the genome using the dCor statistic from the "energy" package.
 }
 \usage{
-	calculateConditionalCors(Mat, TFs, n.cores=1, threshold.interaction=0.01, bidirection=TRUE, threshold.indirect=0.5, exclude.indirect=TRUE)
+	calculateConditionalCors(Mat, TFs, Dep, n.cores=1, threshold.interaction=0.01, bidirectional=TRUE, threshold.indirect=0.5, exclude.indirect=TRUE)
 }
 \arguments{
   \item{Mat}{gene by sample expression matrix after normalization and/or batch correction.}
   \item{TFs}{vector of gene names of the TFs of interest.}
-  \item{Adj}{output from calculateTFstoTargets}
+  \item{Dep}{output from calculateTFstoTargets}
   \item{n.cores}{number of cores to run in parallel.}
   \item{threshold.interaction}{threshold for calling pair of correlations as a TF-TF interaction.}
   \item{bidirectional}{whether TF-TF interactions must be bidirection. (see Details)}
@@ -47,7 +47,7 @@ A list of two dataframe:
 	Mat <- matrix(rnorm(1000), nrow=10);
 	rownames(Mat) <- c("A", "B", "C", "D", "E",
 			   "F", "G", "H", "I", "J")
-	Dep <- calculateTFstoTargets(Mat, c("A", "B", "C", "D"), n.cores=1, mt_method="fdr=0.2")
+	Dep <- calculateTFstoTargets(Mat, c("A", "B", "C", "D"), n.cores=1, mt_correction="fdr=2")
 	out <- calculateConditionalCors(Mat, c("A", "B", "C", "D"), Dep, n.cores=1, threshold.indirect=0.2, threshold.interaction=0.1, exclude.indirect=FALSE)
 }
 \seealso{calculateTFstoTargets}
