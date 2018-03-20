@@ -10,5 +10,6 @@ The current version is highly parallelized but not yet optimized for large datas
 Installation :
 
 >require("devtools")
+
 >install_github('tallulandrews/scTarNet')
 
