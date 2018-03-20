@@ -24,7 +24,7 @@ $$dCor(X,Y) = \frac{dCov(X,Y)}{\sqrt{dVar(X)dVar(Y)}}$$
 
 The distance covariance (dCov) is calculated as:
 
-$$ dCov^2(X,Y) = \fract{1}{n^2}\sum_j\sum_k A_{j,k}B_{j,k} $$
+$$ dCov^2(X,Y) = \frac{1}{n^2}\sum_j\sum_k A_{j,k}B_{j,k} $$
 
 where $A_{j,k}$ and $B_{j,k}$ are:
 
