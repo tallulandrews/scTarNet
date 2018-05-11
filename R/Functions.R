@@ -57,6 +57,10 @@ dcor.test.somevsall <- function(mat, rows, n.cores) {
                 strength = dcor_test$estimate;
 		
 		dir = getDirection(mat[j,(mat[row,]<=low)],mat[j,(mat[row,]>=high)])
+
+		if (!is.finite(pvals)) {pvals <- 1}
+		if (!is.finite(strength)) {strength <- NA}
+		if (!is.finite(dir)) {dir <- 0}
 		return(data.frame(pv=pvals, st=strength, d=dir));
         } # inner foreach (each potential target)
         } # outer foreach (each TF)
