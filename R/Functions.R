@@ -16,8 +16,8 @@ dcor.test.somevsall <- function(mat, rows, n.cores) {
 	cl <- parallel::makeCluster(n.cores);
 	doParallel::registerDoParallel(cl);
 	
-        N <- length(mat[,1]);
-        M <- length(rows);
+        N <- nrow(mat); # Number of potential targets
+        M <- length(rows); # Number of TFs
         pvals <- matrix(rep(NA,times=N*M),nrow=M,ncol=N);
         strength <- matrix(rep(NA,times=N*M),nrow=M,ncol=N);
         direction <- matrix(rep(NA,times=N*M),nrow=M,ncol=N);
@@ -39,7 +39,10 @@ dcor.test.somevsall <- function(mat, rows, n.cores) {
 		    if (is(obj, "try-error")) {
 		                obj$p.value=NA
 		                return(0)
-		        }else if (obj$p.value < 0.05) {
+		        }else if (is.na(obj$p.value)) {
+		                obj$p.value=NA
+		                return(0)
+			} else if (obj$p.value < 0.05) {
 		                return(sign(obj$statistic))
 		        } else {
 		                return(0);
