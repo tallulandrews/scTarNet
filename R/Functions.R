@@ -56,7 +56,8 @@ dcor.test.somevsall <- function(mat, rows, n.cores) {
                 pvals = dcor_test$p.val;
                 strength = dcor_test$estimate;
 		
-		dir = getDirection(mat[j,(mat[row,]<=low)],mat[j,(mat[row,]>=high)])
+		#dir = getDirection(mat[j,(mat[row,]<=low)],mat[j,(mat[row,]>=high)])
+		dir = getDirection(mat[j,(mat[row,]>=high)], mat[j,(mat[row,]<=low)])
 
 		if (!is.finite(pvals)) {pvals <- 1}
 		if (!is.finite(strength)) {strength <- NA}
@@ -80,7 +81,32 @@ dcor.test.somevsall <- function(mat, rows, n.cores) {
         return(output)
 }
 
-dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold.interaction) {
+
+# Post-hoc fix
+internal_class_interactions <- function(Int, Dep) {
+	Int[,"type"] <- as.character(Int[,"type"])
+	i <- 1;
+	while (i  <= nrow(Int)) {
+		set <- Int[i,]
+		set <- t(set)[,1]
+		dir1 <- Dep[ Dep[,1] == set[1] & Dep[,2] == set[3], "direction"]
+		dir2 <- Dep[ Dep[,1] == set[2] & Dep[,2] == set[3], "direction"]
+		if (length(dir1) == 0 | length(dir2) == 0) {
+			Int <- Int[-i,];
+			i <- i -1;
+		} else {
+			if (dir1 == dir2 | dir1 == 0 | dir2 == 0) {
+				Int[i,"type"] <- "cooperation";
+			} else {
+				Int[i,"type"] <- "antagonism";
+			}
+		}
+		i <- i+1;
+	}
+	return(Int);
+}
+
+dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold.interaction) { # DUPLICATED
 
 	tf1 <- x[1];
 	tf2 <- x[2];
@@ -91,14 +117,21 @@ dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold
 	sharedtargets = intersect(as.character(tf1.targets), as.character(tf2.targets))
 	out <- vector()
 	for (t in sharedtargets) {
-		dcor_1_t <- Dep[Dep[,1] == tf1, Dep[,2] == t,]$strength;
-		dcor_2_t <- Dep[Dep[,1] == tf2, Dep[,2] == t,]$strength;
+		dcor_1_t <- Dep[Dep[,1] == tf1 & Dep[,2] == t,]$strength;
+		dcor_2_t <- Dep[Dep[,1] == tf2 & Dep[,2] == t,]$strength;
+
+		dir1 <- Dep[Dep[,1] == tf1 & Dep[,2] == t,]$direction
+		dir2 <- Dep[Dep[,1] == tf2 & Dep[,2] == t,]$direction
 
 		pdcor_1_t_g2 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf2,]))
 		pdcor_2_t_g1 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf2,]))
 		if (pdcor_1_t_g2 > threshold.interaction*dcor_1_t & pdcor_2_t_g1 > threshold.interaction*dcor_2_t) {
 			# Interaction
-			out <- rbind(out, c(sort(c(tf1, tf2)), t, "interaction"));
+			if (dir1 == dir2 | dir1 == 0 | dir2 == 0) {
+				out <- rbind(out, c(sort(c(tf1, tf2)), t, "cooperation"));
+			} else {
+				out <- rbind(out, c(sort(c(tf1, tf2)), t, "antagonism"));
+			}
 		} else if (pdcor_1_t_g2 < threshold.indirect*dcor_1_t) {
 			# 1->2->t
 			out <- rbind(out, c(tf1, tf2, t, "pathway"));
@@ -171,7 +204,7 @@ calculateConditionalCors <- function(Mat, TFs, Dep, n.cores=1, threshold.interac
 	cl <- parallel::makeCluster(n.cores);
 	doParallel::registerDoParallel(cl);
         inter <- foreach (i = 1:nrow(pairs), .combine='rbind', .packages='foreach') %dopar% {
-		dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold.interaction) {
+		dcor_classify_interaction <- function(x, Mat, Dep, threshold.indirect, threshold.interaction) { # DUPLICATED
 
 		        tf1 <- x[1];
 		        tf2 <- x[2];
@@ -184,6 +217,9 @@ calculateConditionalCors <- function(Mat, TFs, Dep, n.cores=1, threshold.interac
 		                dcor_1_t <- Dep[Dep[,1] == tf1 & Dep[,2] == t,]$strength;
 		                dcor_2_t <- Dep[Dep[,1] == tf2 & Dep[,2] == t,]$strength;
 
+				dir1 <- Dep[Dep[,1] == tf1 & Dep[,2] == t,]$direction
+				dir2 <- Dep[Dep[,1] == tf2 & Dep[,2] == t,]$direction
+
 		                pdcor_1_t_g2 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf1,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf2,]))
 		                pdcor_2_t_g1 <- energy::pdcor(unlist(Mat[rownames(Mat)==tf2,]), unlist(Mat[rownames(Mat)==t,]),unlist(Mat[rownames(Mat)==tf1,]))
 				print(c(dcor_1_t, pdcor_1_t_g2))
@@ -191,7 +227,11 @@ calculateConditionalCors <- function(Mat, TFs, Dep, n.cores=1, threshold.interac
 		                if ((pdcor_1_t_g2 > threshold.interaction*dcor_1_t & pdcor_2_t_g1 > threshold.interaction*dcor_2_t) |
 					!bidirectional & (pdcor_1_t_g2 > threshold.interaction*dcor_1_t | pdcor_2_t_g1 > threshold.interaction*dcor_2_t )) {
 		                        # Interaction
-		                        out <- rbind(out, c(sort(c(tf1, tf2)), t, "interaction"));
+					if (dir1 == dir2 | dir1 == 0 | dir2 == 0) {
+						out <- rbind(out, c(sort(c(tf1, tf2)), t, "cooperation"));
+					} else {
+						out <- rbind(out, c(sort(c(tf1, tf2)), t, "antagonism"));
+					}
 		                } else if (pdcor_1_t_g2 < threshold.indirect*dcor_1_t) {
 		                        # 1->2->t
 		                        out <- rbind(out, c(tf1, tf2, t, "pathway"));
